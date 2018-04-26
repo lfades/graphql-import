@@ -76,6 +76,17 @@ type Query {
   t.is(importSchema('fixtures/imports-only/all.graphql'), expectedSDL)
 })
 
+test('importSchema: import duplicate', t => {
+  const expectedSDL = `\
+type Query {
+  first: String
+  second: Float
+  third: String
+}
+`
+  t.is(importSchema('fixtures/import-duplicate/all.graphql'), expectedSDL)
+})
+
 test('importSchema: field types', t => {
   const expectedSDL = `\
 type A {
@@ -570,6 +581,25 @@ input PostFilter {
 `
   const actualSDL = importSchema('fixtures/merged-root-fields/a.graphql')
   t.is(actualSDL, expectedSDL)
+})
+
+test('global schema modules', t => {
+  const shared = `
+    type Shared {
+      first: String
+    }
+  `
+  const expectedSDL = `\
+type A {
+  first: String
+  second: Shared
+}
+
+type Shared {
+  first: String
+}
+`
+  t.is(importSchema('fixtures/global/a.graphql', { shared }), expectedSDL)
 })
 
 test('missing type on type', t => {
