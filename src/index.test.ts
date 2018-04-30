@@ -44,6 +44,13 @@ test('parseImportLine: different path', t => {
   })
 })
 
+test('parseImportLine: module in node_modules', t => {
+  t.deepEqual(parseImportLine(`import A from "module-name"`), {
+    imports: ['A'],
+    from: 'module-name',
+  })
+})
+
 test('parseSDL: non-import comment', t => {
   t.deepEqual(parseSDL(`#importent: comment`), [])
 })
@@ -600,6 +607,24 @@ type Shared {
 }
 `
   t.is(importSchema('fixtures/global/a.graphql', { shared }), expectedSDL)
+})
+
+test('Module in node_modules', t => {
+  const expectedSDL = `\
+type A {
+  id: ID!
+  author: B!
+}
+
+type B {
+  id: ID!
+  nickname: String! @lower
+}
+
+directive @lower on FIELD_DEFINITION
+`
+
+  t.is(importSchema('fixtures/import-module/a.graphql'), expectedSDL)
 })
 
 test('missing type on type', t => {
