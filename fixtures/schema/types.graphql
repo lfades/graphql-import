@@ -11,3 +11,8 @@ type A {
 type B {
   updateUser(name: String!): User
 }
+
+# Subscription
+type C {
+  userUpdated: User
+}

@@ -632,6 +632,7 @@ test('Custom schema definition', (t) => {
 schema {
   query: A
   mutation: B
+  subscription: C
 }
 
 type A {
@@ -640,6 +641,10 @@ type A {
 
 type B {
   updateUser(name: String!): User
+}
+
+type C {
+  userUpdated: User
 }
 
 type User {

@@ -3,4 +3,5 @@
 schema {
   query: A
   mutation: B
+  subscription: C
 }
