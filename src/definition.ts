@@ -10,6 +10,7 @@ import {
   DirectiveDefinitionNode,
   InputValueDefinitionNode,
   FieldDefinitionNode,
+  SchemaDefinitionNode
 } from 'graphql'
 
 const builtinTypes = ['String', 'Float', 'Int', 'Boolean', 'ID']
@@ -19,6 +20,7 @@ const builtinDirectives = ['deprecated', 'skip','include']
 export type ValidDefinitionNode =
     | DirectiveDefinitionNode
     | TypeDefinitionNode
+    | SchemaDefinitionNode
 
 export interface DefinitionMap {
   [key: string]: ValidDefinitionNode
@@ -40,9 +42,9 @@ export function completeDefinitionPool(
 ): ValidDefinitionNode[] {
   const visitedDefinitions: { [name: string]: boolean } = {}
   while (newTypeDefinitions.length > 0) {
-    const schemaMap: DefinitionMap = keyBy(allDefinitions, d => d.name.value)
+    const schemaMap: DefinitionMap = keyBy(allDefinitions, d => getNodeName(d))
     const newDefinition = newTypeDefinitions.shift()
-    if (visitedDefinitions[newDefinition.name.value]) {
+    if (visitedDefinitions[getNodeName(newDefinition)]) {
       continue
     }
 
@@ -55,10 +57,22 @@ export function completeDefinitionPool(
     newTypeDefinitions.push(...collectedTypedDefinitions)
     definitionPool.push(...collectedTypedDefinitions)
 
-    visitedDefinitions[newDefinition.name.value] = true
+    visitedDefinitions[getNodeName(newDefinition)] = true
   }
 
   return uniqBy(definitionPool, 'name.value')
+}
+
+/**
+ * Returns the name of a type definition or schema in the case of
+ * SchemaDefinition
+ * @param node GraphQL type node
+ */
+export function getNodeName(node: ValidDefinitionNode): string {
+  if (node.kind === 'SchemaDefinition') {
+    return 'schema'
+  }
+  return node.name.value
 }
 
 /**
@@ -103,22 +117,13 @@ function collectNewTypeDefinitions(
   }
 
   if (newDefinition.kind === 'UnionTypeDefinition') {
-    newDefinition.types.forEach(type => {
-      if (!definitionPool.some(d => d.name.value === type.name.value)) {
-        const typeName = type.name.value
-        const typeMatch = schemaMap[typeName]
-        if (!typeMatch) {
-          throw new Error(`Couldn't find type ${typeName} in any of the schemas.`)
-        }
-        newTypeDefinitions.push(schemaMap[type.name.value])
-      }
-    })
+    newDefinition.types.forEach(collectType)
   }
 
   if (newDefinition.kind === 'ObjectTypeDefinition') {
     // collect missing interfaces
     newDefinition.interfaces.forEach(int => {
-      if (!definitionPool.some(d => d.name.value === int.name.value)) {
+      if (!definitionPool.some(d => getNodeName(d) === int.name.value)) {
         const interfaceName = int.name.value
         const interfaceMatch = schemaMap[interfaceName]
         if (!interfaceMatch) {
@@ -138,6 +143,11 @@ function collectNewTypeDefinitions(
     })
   }
 
+  if (newDefinition.kind === 'SchemaDefinition') {
+    // Include types when a name other than Query/Mutation/Subscription is used
+    newDefinition.operationTypes.forEach(node => collectType(node.type))
+  }
+
   return newTypeDefinitions
 
   function collectNode(node: FieldDefinitionNode | InputValueDefinitionNode) {
@@ -146,7 +156,7 @@ function collectNewTypeDefinitions(
 
     // collect missing argument input types
     if (
-      !definitionPool.some(d => d.name.value === nodeTypeName) &&
+      !definitionPool.some(d => getNodeName(d) === nodeTypeName) &&
       !includes(builtinTypes, nodeTypeName)
     ) {
       const argTypeMatch = schemaMap[nodeTypeName]
@@ -164,7 +174,7 @@ function collectNewTypeDefinitions(
   function collectDirective(directive: DirectiveNode) {
     const directiveName = directive.name.value
     if (
-      !definitionPool.some(d => d.name.value === directiveName) &&
+      !definitionPool.some(d => getNodeName(d) === directiveName) &&
       !includes(builtinDirectives, directiveName)
     ) {
       const directive = schemaMap[directiveName] as DirectiveDefinitionNode
@@ -178,6 +188,17 @@ function collectNewTypeDefinitions(
       directive.arguments.forEach(collectNode)
 
       newTypeDefinitions.push(directive)
+    }
+  }
+
+  function collectType(type: NamedTypeNode) {
+    if (!definitionPool.some(d => getNodeName(d) === type.name.value)) {
+      const typeName = type.name.value
+      const typeMatch = schemaMap[typeName]
+      if (!typeMatch) {
+        throw new Error(`Couldn't find type ${typeName} in any of the schemas.`)
+      }
+      newTypeDefinitions.push(schemaMap[typeName])
     }
   }
 }

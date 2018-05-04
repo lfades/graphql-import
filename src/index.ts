@@ -6,6 +6,7 @@ import * as path from 'path'
 import {
   completeDefinitionPool,
   ValidDefinitionNode,
+  getNodeName
 } from './definition'
 
 /**
@@ -87,19 +88,24 @@ export function importSchema(schema: string, schemas?: { [key: string]: string }
   // Query, Mutation and Subscription should be merged
   // And should always be in the first set, to make sure they
   // are not filtered out.
-  const typesToFilter = ['Query', 'Mutation', 'Subscription']
-  const firstTypes = flatten(typeDefinitions).filter(d => includes(typesToFilter, d.name.value))
-  const otherFirstTypes = typeDefinitions[0].filter(d => !includes(typesToFilter, d.name.value))
+  const typesToFilter = ['Query', 'Mutation', 'Subscription', 'schema']
+  const firstTypes = flatten(typeDefinitions).filter(d => includes(typesToFilter, getNodeName(d)))
+  const otherFirstTypes = typeDefinitions[0].filter(d => !includes(typesToFilter, getNodeName(d)))
   const firstSet = otherFirstTypes.concat(firstTypes)
   const processedTypeNames = []
   const mergedFirstTypes = []
   for (const type of firstSet) {
-    if (!includes(processedTypeNames, type.name.value)) {
-      processedTypeNames.push(type.name.value)
+    if (!includes(processedTypeNames, getNodeName(type))) {
+      processedTypeNames.push(getNodeName(type))
       mergedFirstTypes.push(type)
     } else {
-      const existingType = mergedFirstTypes.find(t => t.name.value === type.name.value)
-      existingType.fields = existingType.fields.concat((type as ObjectTypeDefinitionNode).fields)
+      const existingType = mergedFirstTypes.find(t => getNodeName(t) === getNodeName(type))
+
+      if (type.kind === 'SchemaDefinition') {
+        existingType.operationTypes = existingType.operationTypes.concat(type.operationTypes)
+      } else {
+        existingType.fields = existingType.fields.concat((type as ObjectTypeDefinitionNode).fields)
+      }
     }
   }
 
@@ -249,15 +255,15 @@ function filterImportedDefinitions(
   if (includes(imports, '*')) {
     return filteredDefinitions
   } else {
-    const result = filteredDefinitions.filter(d => includes(imports.map(i => i.split('.')[0]), d.name.value))
+    const result = filteredDefinitions.filter(d => includes(imports.map(i => i.split('.')[0]), getNodeName(d)))
     const fieldImports = imports
       .filter(i => i.split('.').length > 1)
     const groupedFieldImports = groupBy(fieldImports, x => x.split('.')[0])
 
     for (const rootType in groupedFieldImports) {
       const fields = groupedFieldImports[rootType].map(x => x.split('.')[1]);
-      (filteredDefinitions.find(def => def.name.value === rootType) as ObjectTypeDefinitionNode).fields =
-        (filteredDefinitions.find(def => def.name.value === rootType) as ObjectTypeDefinitionNode).fields
+      (filteredDefinitions.find(def => getNodeName(def) === rootType) as ObjectTypeDefinitionNode).fields =
+        (filteredDefinitions.find(def => getNodeName(def) === rootType) as ObjectTypeDefinitionNode).fields
           .filter(f => includes(fields, f.name.value) || includes(fields, '*'))
     }
 
@@ -275,6 +281,7 @@ function filterTypeDefinitions(
   definitions: DefinitionNode[]
 ): ValidDefinitionNode[] {
   const validKinds = [
+    'SchemaDefinition',
     'DirectiveDefinition',
     'ScalarTypeDefinition',
     'ObjectTypeDefinition',
