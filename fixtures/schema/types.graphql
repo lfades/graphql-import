@@ -1,0 +1,13 @@
+type User {
+  name: String
+}
+
+# Query
+type A {
+  users: [User]
+}
+
+# Mutation
+type B {
+  updateUser(name: String!): User
+}
