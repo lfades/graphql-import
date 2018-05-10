@@ -1,4 +1,5 @@
 import test from 'ava'
+import * as fs from 'fs'
 import { parseImportLine, parseSDL, importSchema } from '.'
 
 test('parseImportLine: parse single import', t => {
@@ -610,6 +611,19 @@ type Shared {
 })
 
 test('Module in node_modules', t => {
+  const b = `\
+# import lower from './lower.graphql'
+
+type B {
+  id: ID!
+  nickname: String! @lower
+}
+`
+
+  const lower = `\
+directive @lower on FIELD_DEFINITION
+`
+
   const expectedSDL = `\
 type A {
   id: ID!
@@ -623,6 +637,13 @@ type B {
 
 directive @lower on FIELD_DEFINITION
 `
+
+  if (!fs.existsSync('node_modules/graphql-import-test')) {
+    fs.mkdirSync('node_modules/graphql-import-test')
+  }
+
+  fs.writeFileSync('node_modules/graphql-import-test/b.graphql', b)
+  fs.writeFileSync('node_modules/graphql-import-test/lower.graphql', lower)
 
   t.is(importSchema('fixtures/import-module/a.graphql'), expectedSDL)
 })
